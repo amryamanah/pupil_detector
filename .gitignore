@@ -1,0 +1,12 @@
+.idea
+.ipynb_checkpoints
+orat_oret
+HOG
+LBP
+*.log
+*DS_Store
+dataset
+data_analysis
+test_pupil
+*__pycache__
+*linear
