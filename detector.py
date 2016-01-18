@@ -18,6 +18,7 @@ kernel_type = "linear"
 blur_kernel = 15
 blur_type = "bilateral"
 color_channel = "b_star_hist_equal"
+# color_channel = "b_star"
 svm_classifier_path = os.path.join("hog_model",
                                    "{}".format(kernel_type),
                                    "o{}_ppc{}_cpb{}".format(orientation, ppc, cpb),
@@ -32,11 +33,11 @@ analysis_type = "partial"
 max_timestamp = 2.0
 step_second = 1.0
 
+
 skip_folder = ["pending", "finished",
                "nopl", "pl",
-               "bbox_img", "candidate", "final",
+               "bbox_img", "candidate", "final", "plr_result", "final_extended",
                "hard_neg", "raw", "hist_equ", "hist_equ_blur", "positive", "raw", "union"]
-
 descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
 pupil_finder = PupilFinder(descriptor, svm_classifier_path=svm_classifier_path,
                            win_size=win_size, step_size=step_size,
@@ -69,6 +70,7 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                 video = cv2.VideoCapture(video_path)
                 first_eye_timestamp = None
                 lst_frame = None
+                frame_count = 1
                 while True:
                     (grabbed, frame) = video.read()
 
@@ -77,10 +79,12 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
 
                     frame_timestamp = video.get(cv2.CAP_PROP_POS_MSEC) / 1000.00
                     frame_timestamp = float("{:.2f}".format(frame_timestamp))
+                    filename = "{}_{}".format(frame_count, frame_timestamp)
+                    print(filename)
                     if not first_eye_timestamp and frame_timestamp > 0.5:
                         final_eye_flag, final_point, final_patch_equ = pupil_finder.detect_pupil(
                                 frame, nopl_result_path,
-                                frame_timestamp)
+                                filename)
                         if final_eye_flag:
                             print("Set First frame timestamp at {}s".format(frame_timestamp))
                             first_eye_timestamp = frame_timestamp
@@ -101,13 +105,14 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                     #                         frame_timestamp
                     #                 )
                     elif first_eye_timestamp:
-                        if frame_timestamp < 1.87:
+                        if frame_timestamp < 3.0:
                             print("Analyzing frame_timestamp {}".format(frame_timestamp))
                             final_eye_flag, final_point, final_patch_equ = \
                                     pupil_finder.detect_pupil(
                                             frame, nopl_result_path,
-                                            frame_timestamp
-                                    )
+                                            filename
+                                )
+                    frame_count += 1
 
                 video.release()
                 print("Finish processing {}".format(video_path))

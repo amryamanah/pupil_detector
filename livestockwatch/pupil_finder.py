@@ -26,7 +26,7 @@ class PupilFinder:
                  win_size, step_size,
                  img_width, img_height,
                  channel_type, blur_kernel, blur_type,
-                 svm_kernel_type, debug=False):
+                 svm_kernel_type, debug=False, extent_pixel=32):
         self.svm_classifier = joblib.load(svm_classifier_path)
         self.descriptor = descriptor
         self.win_size = win_size
@@ -38,6 +38,7 @@ class PupilFinder:
         self.blur_type = blur_type
         self.svm_kernel_type = svm_kernel_type
         self.debug = debug
+        self.extent_pixel = extent_pixel
 
     def _gen_convol(self, start_point=(0, 0), win_size=None, step_size=None, img_width=None, img_height=None):
         if not win_size:
@@ -235,97 +236,97 @@ class PupilFinder:
         t0 = time()
         logger.info("[START] Pupil Detection")
 
-        if is_too_dark(image):
-            if self.debug:
-                write_as_png(os.path.join(too_dark_path, "{}.png".format(file_name)), untouched_image)
+        # if is_too_dark(image):
+        #     if self.debug:
+        #         write_as_png(os.path.join(too_dark_path, "{}.png".format(file_name)), untouched_image)
+        # else:
+        if self.debug:
+            # Save raw frame
+            write_as_png(os.path.join(raw_path, "{}.png".format(file_name)), untouched_image)
+            # Save equ frame
+            write_as_png(os.path.join(raw_hist_equ_path, "{}.png".format(file_name)), equ_hist_color_image(untouched_image))
+
+        img_channel = get_specific_channel(image, self.channel_type,
+                                           blur_kernel=self.blur_kernel, blur_type=self.blur_type)
+        print(img_channel.shape)
+        assert img_channel.shape == (self.img_height, self.img_width)
+
+        points = self._gen_convol()
+
+        output = []
+        for point in points:
+            result = self._check_patch(img_channel, point)
+            confidence, eye_flag, point = result
+            if eye_flag:
+                if confidence > 0.1:
+                    output.append(result)
+
+        best_output = sorted(output, reverse=True)[:3]
+        false_output = sorted(output, reverse=True)[3:]
+        if self.debug:
+
+            for count, output in enumerate(best_output):
+                confidence, eye_flag, point = output
+                y, x = point
+                cv2.rectangle(candidate_image, (x[0], y[0]), (x[1], y[1]), PupilFinder.BBOX_COLOR_POSITIVE[count], 3)
+                cv2.putText(candidate_image, "{0:.2f}".format(confidence[0]),
+                            (int(x[0]+self.win_size/2), int(y[0]+self.win_size/2)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, PupilFinder.BBOX_COLOR_POSITIVE[count], 3)
+                pos_patch = untouched_image[y[0]:y[1], x[0]:x[1]]
+                result_name = "{:.2f}_{}.png".format(confidence[0], file_name)
+                write_as_png(os.path.join(positive_path,result_name), pos_patch)
+
+            write_as_png(os.path.join(bbox_candidate_path, "{}.png".format(file_name)), candidate_image)
+
+            for count, output in enumerate(false_output):
+                confidence, eye_flag, point = output
+                y, x = point
+                hard_neg_patch = untouched_image[y[0]:y[1], x[0]:x[1]]
+                result_name = "{:.2f}_{}.png".format(confidence[0], file_name)
+                write_as_png(os.path.join(hard_neg_path, result_name), hard_neg_patch)
+
+        if len(best_output) == 1:
+            for count, output in enumerate(best_output):
+                confidence, eye_flag, point = output
+                y, x = point
+                final_image = candidate_image
+                lst_final_output.append((confidence, (x[0], y[0], x[1], y[1])))
+
         else:
-            if self.debug:
-                # Save raw frame
-                write_as_png(os.path.join(raw_path, "{}.png".format(file_name)), untouched_image)
-                # Save equ frame
-                write_as_png(os.path.join(raw_hist_equ_path, "{}.png".format(file_name)), equ_hist_color_image(untouched_image))
+            pprint(best_output)
+            pick = self.get_union_bbox(best_output)
+            for (startX, startY, endX, endY) in pick:
+                cv2.rectangle(final_image, (startX, startY), (endX, endY), (0, 255, 0), 2)
+                union_patch = untouched_image[startY:endY, startX:endX]
+                result_name = "{}.png".format(file_name)
+                if self.debug:
+                    write_as_png(os.path.join(union_path, result_name), union_patch)
+                union_channel = get_specific_channel(union_patch, self.channel_type,
+                                                     blur_kernel=self.blur_kernel, blur_type=self.blur_type)
+                fp_height, fp_width = union_patch.shape[:2]
+                fp_points = self._gen_convol(step_size=4, img_width=fp_width, img_height=fp_height)
+                fp_output = []
+                for fp_point in fp_points:
+                    fp_result = self._check_patch(union_channel, fp_point)
+                    confidence, eye_flag, point = fp_result
+                    if eye_flag:
+                        fp_output.append(fp_result)
 
-            img_channel = get_specific_channel(image, self.channel_type,
-                                               blur_kernel=self.blur_kernel, blur_type=self.blur_type)
-            print(img_channel.shape)
-            assert img_channel.shape == (self.img_height, self.img_width)
-
-            points = self._gen_convol()
-
-            output = []
-            for point in points:
-                result = self._check_patch(img_channel, point)
-                confidence, eye_flag, point = result
-                if eye_flag:
-                    if confidence > 0.1:
-                        output.append(result)
-
-            best_output = sorted(output, reverse=True)[:3]
-            false_output = sorted(output, reverse=True)[3:]
-            if self.debug:
-
-                for count, output in enumerate(best_output):
-                    confidence, eye_flag, point = output
-                    y, x = point
-                    cv2.rectangle(candidate_image, (x[0], y[0]), (x[1], y[1]), PupilFinder.BBOX_COLOR_POSITIVE[count], 3)
-                    cv2.putText(candidate_image, "{0:.2f}".format(confidence[0]),
-                                (int(x[0]+self.win_size/2), int(y[0]+self.win_size/2)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, PupilFinder.BBOX_COLOR_POSITIVE[count], 3)
-                    pos_patch = untouched_image[y[0]:y[1], x[0]:x[1]]
-                    result_name = "{:.2f}_{}.png".format(confidence[0], file_name)
-                    write_as_png(os.path.join(positive_path,result_name), pos_patch)
-
-                write_as_png(os.path.join(bbox_candidate_path, "{}.png".format(file_name)), candidate_image)
-
-                for count, output in enumerate(false_output):
-                    confidence, eye_flag, point = output
-                    y, x = point
-                    hard_neg_patch = untouched_image[y[0]:y[1], x[0]:x[1]]
-                    result_name = "{:.2f}_{}.png".format(confidence[0], file_name)
-                    write_as_png(os.path.join(hard_neg_path, result_name), hard_neg_patch)
-
-            if len(best_output) == 1:
-                for count, output in enumerate(best_output):
-                    confidence, eye_flag, point = output
-                    y, x = point
-                    final_image = candidate_image
-                    lst_final_output.append((confidence, (x[0], y[0], x[1], y[1])))
-
-            else:
-                pprint(best_output)
-                pick = self.get_union_bbox(best_output)
-                for (startX, startY, endX, endY) in pick:
-                    cv2.rectangle(final_image, (startX, startY), (endX, endY), (0, 255, 0), 2)
-                    union_patch = untouched_image[startY:endY, startX:endX]
-                    result_name = "{}.png".format(file_name)
-                    if self.debug:
-                        write_as_png(os.path.join(union_path, result_name), union_patch)
-                    union_channel = get_specific_channel(union_patch, self.channel_type,
-                                                         blur_kernel=self.blur_kernel, blur_type=self.blur_type)
-                    fp_height, fp_width = union_patch.shape[:2]
-                    fp_points = self._gen_convol(step_size=4, img_width=fp_width, img_height=fp_height)
-                    fp_output = []
-                    for fp_point in fp_points:
-                        fp_result = self._check_patch(union_channel, fp_point)
-                        confidence, eye_flag, point = fp_result
-                        if eye_flag:
-                            fp_output.append(fp_result)
-
-                    if len(fp_output) == 0:
-                        for count, output in enumerate(best_output[:1]):
-                            confidence, eye_flag, point = output
-                            y, x = point
-                            lst_final_output.append((confidence, (x[0], y[0], x[1], y[1])))
-                    else:
-                        fp_best_output = sorted(fp_output, reverse=True)[:1]
-                        for count, output in enumerate(fp_best_output[:1]):
-                            confidence, eye_flag, point = output
-                            y, x = point
-                            fp_startX = startX+x[0]
-                            fp_startY = startY+y[0]
-                            fp_endX = fp_startX+self.win_size
-                            fp_endY = fp_startY+self.win_size
-                            lst_final_output.append((confidence, (fp_startX, fp_startY, fp_endX, fp_endY)))
+                if len(fp_output) == 0:
+                    for count, output in enumerate(best_output[:1]):
+                        confidence, eye_flag, point = output
+                        y, x = point
+                        lst_final_output.append((confidence, (x[0], y[0], x[1], y[1])))
+                else:
+                    fp_best_output = sorted(fp_output, reverse=True)[:1]
+                    for count, output in enumerate(fp_best_output[:1]):
+                        confidence, eye_flag, point = output
+                        y, x = point
+                        fp_startX = startX+x[0]
+                        fp_startY = startY+y[0]
+                        fp_endX = fp_startX+self.win_size
+                        fp_endY = fp_startY+self.win_size
+                        lst_final_output.append((confidence, (fp_startX, fp_startY, fp_endX, fp_endY)))
 
         lst_final_output = sorted(lst_final_output, reverse=True)[:1]
         for confidence, point in lst_final_output:
@@ -334,10 +335,10 @@ class PupilFinder:
             final_patch = untouched_image[point[1]:point[3], point[0]:point[2]]
             cv2.rectangle(final_image, (point[0], point[1]), (point[2], point[3]), (0, 255, 255), 3)
 
-            result_name = "{}_{:.2f}.png".format(file_name, confidence[0])
+            result_name = "{}.png".format(file_name)
             write_as_png(os.path.join(final_path, result_name), final_patch)
 
-            final_extended_patch = self.extend_patch(untouched_image, point, 32)
+            final_extended_patch = self.extend_patch(untouched_image, point, self.extent_pixel)
             write_as_png(os.path.join(final_extended_path, result_name), final_extended_patch)
 
             final_patch_equ = equ_hist_color_image(final_extended_patch)

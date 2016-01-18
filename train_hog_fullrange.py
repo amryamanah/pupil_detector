@@ -12,7 +12,7 @@ blur_type = "bilateral"
 orientation = 9
 ppc = 4
 cpb = 1
-lst_color_channel = ["b_star", "gray"]
+lst_color_channel = ["b_star", "gray", "b_star_hist_equal"]
 color_channel = "b_star_hist_equal"
 
 

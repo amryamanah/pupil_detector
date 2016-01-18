@@ -38,7 +38,7 @@ pupil_finder = PupilFinder(descriptor, svm_classifier_path=svm_classifier_path,
                            img_width=img_width, img_height=img_height,
                            channel_type=color_channel, blur_kernel=blur_kernel, blur_type=blur_type,
                            svm_kernel_type=kernel_type,
-                           debug=False)
+                           debug=True, extent_pixel=150)
 
 # analysis_type = "full"
 analysis_type = "partial"
@@ -50,59 +50,45 @@ skip_folder = ["pending", "finished",
                "bbox_img", "candidate", "final",
                "hard_neg", "raw", "hist_equ", "hist_equ_blur", "positive", "raw", "union"]
 
-scanned_folder = "/Volumes/amryhd/dataset-WA02"
+scanned_folder = "data_analysis/hansan_data"
 scanned_folder = os.path.abspath(scanned_folder)
 
 for dirpath, dirnames, files in os.walk(scanned_folder):
-    part_dirpath = dirpath.split(os.sep)
-    if is_skipped_folder(dirpath, skip_folder):
-        print("[SKIPPED] dirpath {}".format(dirpath))
-    else:
-        print("[PROCESSED] dirpath {}".format(dirpath))
-        for filename in files:
-            if filename.endswith(".avi"):
-                acquisition_type = "nopl"
-                nopl_result_path = os.path.join(dirpath, acquisition_type)
-                if os.path.exists(nopl_result_path):
-                    shutil.rmtree(nopl_result_path)
-                os.makedirs(nopl_result_path, exist_ok=True)
-                video_path = os.path.join(dirpath, filename)
-                print("Start processing {}".format(video_path))
-                video = cv2.VideoCapture(video_path)
-                first_eye_timestamp = None
-                lst_frame = None
-                while True:
-                    (grabbed, frame) = video.read()
+    for filename in files:
+        if filename.endswith(".avi"):
+            acquisition_type = "nopl"
+            nopl_result_path = os.path.join(dirpath, acquisition_type)
+            # if os.path.exists(nopl_result_path):
+            #     shutil.rmtree(nopl_result_path)
+            os.makedirs(nopl_result_path, exist_ok=True)
+            os.makedirs(os.path.join(nopl_result_path, "raw"), exist_ok=True)
+            video_path = os.path.join(dirpath, filename)
+            print("Start processing {}".format(video_path))
+            video = cv2.VideoCapture(video_path)
+            first_eye_timestamp = None
+            lst_frame = None
+            frame_count = 0
+            while True:
+                (grabbed, frame) = video.read()
 
-                    if not grabbed:
-                        break
+                if not grabbed:
+                    break
 
-                    frame_timestamp = video.get(cv2.CAP_PROP_POS_MSEC) / 1000.00
-                    frame_timestamp = float("{:.2f}".format(frame_timestamp))
-                    if not first_eye_timestamp and frame_timestamp > 0.5:
-                        final_eye_flag, final_point, final_patch_equ = pupil_finder.detect_pupil(
-                                frame, nopl_result_path,
-                                frame_timestamp)
-                        if final_eye_flag:
-                            print("Set First frame timestamp at {}s".format(frame_timestamp))
-                            first_eye_timestamp = frame_timestamp
-                            lst_frame = np.arange(first_eye_timestamp, max_timestamp, step_second)
+                frame_timestamp = video.get(cv2.CAP_PROP_POS_MSEC) / 1000.00
+                frame_timestamp = float("{:.2f}".format(frame_timestamp))
+                frame_count += 1
+                # frame = cv2.resize(frame, (1280, 960))
 
-                    elif first_eye_timestamp:
-                        for x in np.nditer(lst_frame):
-                            lower_bound = x - 0.08
-                            upper_bound = x + 0.16
+                if frame_timestamp < 2.1:
+                    write_as_png(os.path.join(nopl_result_path,"raw", "{}.png".format(frame_timestamp)), frame)
+                    # final_eye_flag, final_point, final_patch_equ = pupil_finder.detect_pupil(
+                    #         frame, nopl_result_path,
+                    #         frame_timestamp)
+                    # if final_eye_flag:
+                    #     print("Set First frame timestamp at {}s".format(frame_timestamp))
+                    #     first_eye_timestamp = frame_timestamp
+                    #     lst_frame = np.arange(first_eye_timestamp, max_timestamp, step_second)
 
-                            if lower_bound < frame_timestamp < upper_bound:
-                                print("Analyzing frame_timestamp {}lower_bound = {}, "
-                                      "upper_bound = {}".format(frame_timestamp,
-                                                                lower_bound, upper_bound))
-                                final_eye_flag, final_point, final_patch_equ = \
-                                    pupil_finder.detect_pupil(
-                                            frame, nopl_result_path,
-                                            frame_timestamp
-                                    )
-
-
-                video.release()
-                print("Finish processing {}".format(video_path))
+            video.release()
+            print("Finish processing {}".format(video_path))
+            print(frame_count)
