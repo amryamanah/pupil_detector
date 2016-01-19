@@ -78,8 +78,12 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                         break
 
                     frame_timestamp = video.get(cv2.CAP_PROP_POS_MSEC) / 1000.00
+                    if frame_timestamp == 0.0:
+                        frame_timestamp = frame_count * 0.06666666666666667
+
                     frame_timestamp = float("{:.2f}".format(frame_timestamp))
                     filename = "{}_{}".format(frame_count, frame_timestamp)
+
                     print(filename)
                     if not first_eye_timestamp and frame_timestamp > 0.5:
                         final_eye_flag, final_point, final_patch_equ = pupil_finder.detect_pupil(
