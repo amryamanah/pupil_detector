@@ -3,6 +3,7 @@ import uuid
 from pprint import pprint
 import logging
 from time import time
+import asyncio
 import cv2
 
 import numpy as np
@@ -22,11 +23,12 @@ class PupilFinder:
 
     IMG_CLASS = ["negative", "positive"]
 
-    def __init__(self, descriptor, svm_classifier_path,
+    def __init__(self, loop, descriptor, svm_classifier_path,
                  win_size, step_size,
                  img_width, img_height,
                  channel_type, blur_kernel, blur_type,
                  svm_kernel_type, debug=False, extent_pixel=32):
+        self.loop = loop
         self.svm_classifier = joblib.load(svm_classifier_path)
         self.descriptor = descriptor
         self.win_size = win_size
@@ -127,75 +129,35 @@ class PupilFinder:
 
         return [x for x in set(bbox_union)]
 
-    def non_max_suppression(self, output, overlapThresh):
-        #  Felzenszwalb et al.
-        # if there are no boxes, return an empty list
-        if len(output) == 0:
-            return []
-        # initialize the list of picked indexes
-        boxes = []
-        for confidence, eye_flag, point in output:
+    def check_patch_async(self, img_channel, points):
+        output = []
+
+        async def check_patch(img_channel, point):
+            t0 = time()
+            # logger.info("[START] Classify patch ")
+
             y, x = point
-            boxes.append((x[0], y[0], x[1], y[1]))
-        boxes = np.array(boxes)
-        pick = []
-        # grab the coordinates of the bounding boxes
-        x1 = boxes[:, 0]
-        y1 = boxes[:, 1]
-        x2 = boxes[:, 2]
-        y2 = boxes[:, 3]
+            patch = img_channel[y[0]:y[1], x[0]:x[1]]
 
-        # compute the area of the bounding boxes and sort the bounding
-        # boxes by the bottom-right y-coordinate of the bounding box
-        area = (x2 - x1 + 1) * (y2 - y1 + 1)
-        idxs = np.argsort(y2)
+            img_feature = self.descriptor.describe(patch).reshape(1, -1)
 
-        # keep looping while some indexes still remain in the indexes
-        # list
-        while len(idxs) > 0:
-            # grab the last index in the indexes list and add the
-            # index value to the list of picked indexes
-            last = len(idxs) - 1
-            i = idxs[last]
-            pick.append(i)
+            eye_flag = self.svm_classifier.predict(img_feature)[0]
+            confidence = self.svm_classifier.decision_function(img_feature)
 
-            # find the largest (x, y) coordinates for the start of
-            # the bounding box and the smallest (x, y) coordinates
-            # for the end of the bounding box
-            xx1 = np.maximum(x1[i], x1[idxs[:last]])
-            yy1 = np.maximum(y1[i], y1[idxs[:last]])
-            xx2 = np.minimum(x2[i], x2[idxs[:last]])
-            yy2 = np.minimum(y2[i], y2[idxs[:last]])
+            # logger.info("[FINISH] done in %0.3fs" % (time() - t0))
+            return confidence, eye_flag, point
 
-            # compute the width and height of the bounding box
-            w = np.maximum(0, xx2 - xx1 + 1)
-            h = np.maximum(0, yy2 - yy1 + 1)
+        async def gather_result(img_channel, point):
+            result = await check_patch(img_channel, point)
+            confidence, eye_flag, point = result
+            if eye_flag:
+                if confidence > 0.1:
+                    output.append(result)
 
-            # compute the ratio of overlap
-            overlap = (w * h) / area[idxs[:last]]
+        tasks = [asyncio.ensure_future(gather_result(img_channel, point)) for point in points]
+        self.loop.run_until_complete(asyncio.wait(tasks))
 
-            # delete all indexes from the index list that have
-            idxs = np.delete(idxs, np.concatenate(([last],
-                np.where(overlap > overlapThresh)[0])))
-
-        # return only the bounding boxes that were picked using the
-        # integer data type
-        return boxes[pick].astype("int")
-
-    def _check_patch(self, img_channel, point):
-        t0 = time()
-        # logger.info("[START] Classify patch ")
-
-        y, x = point
-        patch = img_channel[y[0]:y[1], x[0]:x[1]]
-
-        img_feature = self.descriptor.describe(patch).reshape(1, -1)
-
-        eye_flag = self.svm_classifier.predict(img_feature)[0]
-        confidence = self.svm_classifier.decision_function(img_feature)
-
-        # logger.info("[FINISH] done in %0.3fs" % (time() - t0))
-        return confidence, eye_flag, point
+        return output
 
     def detect_pupil(self, image, result_path, file_name):
         final_eye_flag = False
@@ -236,10 +198,6 @@ class PupilFinder:
         t0 = time()
         logger.info("[START] Pupil Detection")
 
-        # if is_too_dark(image):
-        #     if self.debug:
-        #         write_as_png(os.path.join(too_dark_path, "{}.png".format(file_name)), untouched_image)
-        # else:
         if self.debug:
             # Save raw frame
             write_as_png(os.path.join(raw_path, "{}.png".format(file_name)), untouched_image)
@@ -252,14 +210,7 @@ class PupilFinder:
         assert img_channel.shape == (self.img_height, self.img_width)
 
         points = self._gen_convol()
-
-        output = []
-        for point in points:
-            result = self._check_patch(img_channel, point)
-            confidence, eye_flag, point = result
-            if eye_flag:
-                if confidence > 0.1:
-                    output.append(result)
+        output = self.check_patch_async(img_channel, points)
 
         best_output = sorted(output, reverse=True)[:3]
         false_output = sorted(output, reverse=True)[3:]
@@ -305,12 +256,8 @@ class PupilFinder:
                                                      blur_kernel=self.blur_kernel, blur_type=self.blur_type)
                 fp_height, fp_width = union_patch.shape[:2]
                 fp_points = self._gen_convol(step_size=4, img_width=fp_width, img_height=fp_height)
-                fp_output = []
-                for fp_point in fp_points:
-                    fp_result = self._check_patch(union_channel, fp_point)
-                    confidence, eye_flag, point = fp_result
-                    if eye_flag:
-                        fp_output.append(fp_result)
+
+                fp_output = self.check_patch_async(union_channel, fp_points)
 
                 if len(fp_output) == 0:
                     for count, output in enumerate(best_output[:1]):
