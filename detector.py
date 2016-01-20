@@ -2,6 +2,7 @@ import os
 import cv2
 import shutil
 import argparse
+import asyncio
 
 import numpy as np
 from livestockwatch.pupil_finder import PupilFinder
@@ -26,20 +27,22 @@ svm_classifier_path = os.path.join("hog_model",
                                    "hog_svm.pkl")
 debug = False
 win_size = 256
-step_size = 64
+step_size = 80
 img_width = 1280
 img_height = 960
 analysis_type = "partial"
 max_timestamp = 2.0
 step_second = 1.0
 
+loop = asyncio.get_event_loop()
 
 skip_folder = ["pending", "finished",
                "nopl", "pl",
                "bbox_img", "candidate", "final", "plr_result", "final_extended",
                "hard_neg", "raw", "hist_equ", "hist_equ_blur", "positive", "raw", "union"]
 descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
-pupil_finder = PupilFinder(descriptor, svm_classifier_path=svm_classifier_path,
+pupil_finder = PupilFinder(loop=loop,
+                           descriptor=descriptor, svm_classifier_path=svm_classifier_path,
                            win_size=win_size, step_size=step_size,
                            img_width=img_width, img_height=img_height,
                            channel_type=color_channel, blur_kernel=blur_kernel, blur_type=blur_type,
@@ -94,20 +97,6 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                             first_eye_timestamp = frame_timestamp
                             lst_frame = np.arange(first_eye_timestamp, max_timestamp, step_second)
 
-                    # elif first_eye_timestamp:
-                    #     for x in np.nditer(lst_frame):
-                    #         lower_bound = x - 0.08
-                    #         upper_bound = x + 0.16
-                    #
-                    #         if lower_bound < frame_timestamp < upper_bound:
-                    #             print("Analyzing frame_timestamp {}lower_bound = {}, "
-                    #                   "upper_bound = {}".format(frame_timestamp,
-                    #                                             lower_bound, upper_bound))
-                    #             final_eye_flag, final_point, final_patch_equ = \
-                    #                 pupil_finder.detect_pupil(
-                    #                         frame, nopl_result_path,
-                    #                         frame_timestamp
-                    #                 )
                     elif first_eye_timestamp:
                         if frame_timestamp < 3.0:
                             print("Analyzing frame_timestamp {}".format(frame_timestamp))
@@ -137,3 +126,5 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                     #     img_path = os.path.join(dirpath, filename)
                     #     img = cv2.imread(img_path)
                     #     final_point, result_frame = pupil_finder.detect_pupil(img, pl_result_path, filename)
+
+loop.close()
