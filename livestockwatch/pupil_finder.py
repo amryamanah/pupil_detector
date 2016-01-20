@@ -255,7 +255,7 @@ class PupilFinder:
                 union_channel = get_specific_channel(union_patch, self.channel_type,
                                                      blur_kernel=self.blur_kernel, blur_type=self.blur_type)
                 fp_height, fp_width = union_patch.shape[:2]
-                fp_points = self._gen_convol(step_size=4, img_width=fp_width, img_height=fp_height)
+                fp_points = self._gen_convol(step_size=32, img_width=fp_width, img_height=fp_height)
 
                 fp_output = self.check_patch_async(union_channel, fp_points)
 

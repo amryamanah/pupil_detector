@@ -27,7 +27,7 @@ svm_classifier_path = os.path.join("hog_model",
                                    "hog_svm.pkl")
 debug = False
 win_size = 256
-step_size = 64
+step_size = 80
 img_width = 1280
 img_height = 960
 analysis_type = "partial"
