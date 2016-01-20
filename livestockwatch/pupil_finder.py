@@ -185,12 +185,12 @@ class PupilFinder:
         hist_equ_path = os.path.join(result_path, "hist_equ")
         hist_equ_blur_path = os.path.join(result_path, "hist_equ_blur")
 
-        folder_list = [result_path, final_path, final_extended_path, hist_equ_path, hist_equ_blur_path]
+        folder_list = [result_path, final_path, final_extended_path]
 
         if self.debug:
             folder_list = folder_list + [union_path, bbox_path, positive_path, hard_neg_path,
                                          bbox_final_path, bbox_candidate_path, raw_path, raw_hist_equ_path,
-                                         too_dark_path]
+                                         too_dark_path, hist_equ_blur_path, hist_equ_path]
 
         for folder in folder_list:
             os.makedirs(folder, exist_ok=True)
@@ -288,11 +288,12 @@ class PupilFinder:
             final_extended_patch = self.extend_patch(untouched_image, point, self.extent_pixel)
             write_as_png(os.path.join(final_extended_path, result_name), final_extended_patch)
 
-            final_patch_equ = equ_hist_color_image(final_extended_patch)
-            blurred = cv2.bilateralFilter(final_patch_equ, 50, 75, 75)
-            blurred = cv2.fastNlMeansDenoisingColored(blurred, None, 10, 10, 7, 21)
-            write_as_png(os.path.join(hist_equ_blur_path, result_name), blurred)
-            write_as_png(os.path.join(hist_equ_path, result_name), final_patch_equ)
+            if self.debug:
+                final_patch_equ = equ_hist_color_image(final_extended_patch)
+                blurred = cv2.bilateralFilter(final_patch_equ, 50, 75, 75)
+                blurred = cv2.fastNlMeansDenoisingColored(blurred, None, 10, 10, 7, 21)
+                write_as_png(os.path.join(hist_equ_blur_path, result_name), blurred)
+                write_as_png(os.path.join(hist_equ_path, result_name), final_patch_equ)
 
         if self.debug:
             write_as_png(os.path.join(bbox_final_path, "{}.png".format(file_name)), final_image)
