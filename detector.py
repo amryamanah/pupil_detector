@@ -11,6 +11,14 @@ from livestockwatch.utils import is_skipped_folder
 
 from IPython import embed
 
+ap = argparse.ArgumentParser()
+ap.add_argument("-i", "--input", required=True, help= "Path to the scanned folder")
+ap.add_argument("-m", "--main-step", required=False, type=int, default=80, help= "Main step")
+ap.add_argument("-s", "--secondary-step", required=False, type=int, default=32, help= "Secondary step")
+ap.add_argument("-d", "--duration", required=False, type=float, default=3.0, help= "duration of video to be analyzed")
+ap.add_argument("--debug", required=False, type=bool, default=False, help= "debug flag")
+args = vars(ap.parse_args())
+print(args)
 
 orientation = 9
 ppc = 4
@@ -25,9 +33,8 @@ svm_classifier_path = os.path.join("hog_model",
                                    "o{}_ppc{}_cpb{}".format(orientation, ppc, cpb),
                                    "{}".format(color_channel),
                                    "hog_svm.pkl")
-debug = False
+debug = args["debug"]
 win_size = 256
-step_size = 80
 img_width = 1280
 img_height = 960
 analysis_type = "partial"
@@ -42,16 +49,12 @@ skip_folder = ["pending", "finished",
                "hard_neg", "raw", "hist_equ", "hist_equ_blur", "positive", "raw", "union"]
 descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
 pupil_finder = PupilFinder(loop=loop,
-                           descriptor=descriptor, svm_classifier_path=svm_classifier_path,
-                           win_size=win_size, step_size=step_size,
+                           descriptor=descriptor, svm_classifier_path=svm_classifier_path, win_size=win_size,
+                           main_step_size=args["main_step"], secondary_step_size=args["secondary_step"],
                            img_width=img_width, img_height=img_height,
                            channel_type=color_channel, blur_kernel=blur_kernel, blur_type=blur_type,
                            svm_kernel_type=kernel_type,
                            debug=debug)
-
-ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--input", required=True, help= "Path to the scanned folder")
-args = vars(ap.parse_args())
 
 scanned_folder = os.path.abspath(args["input"])
 
@@ -88,7 +91,7 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
                     filename = "{}_{}".format(frame_count, frame_timestamp)
 
                     print(filename)
-                    if not first_eye_timestamp and frame_timestamp > 0.5:
+                    if not first_eye_timestamp and frame_timestamp > args["duration"]:
                         final_eye_flag, final_point, final_patch_equ = pupil_finder.detect_pupil(
                                 frame, nopl_result_path,
                                 filename)

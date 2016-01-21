@@ -24,7 +24,7 @@ class PupilFinder:
     IMG_CLASS = ["negative", "positive"]
 
     def __init__(self, loop, descriptor, svm_classifier_path,
-                 win_size, step_size,
+                 win_size, main_step_size, secondary_step_size,
                  img_width, img_height,
                  channel_type, blur_kernel, blur_type,
                  svm_kernel_type, debug=False, extent_pixel=32):
@@ -32,7 +32,8 @@ class PupilFinder:
         self.svm_classifier = joblib.load(svm_classifier_path)
         self.descriptor = descriptor
         self.win_size = win_size
-        self.step_size = step_size
+        self.main_step_size = main_step_size
+        self.secondary_step_size = secondary_step_size
         self.img_width = img_width
         self.img_height = img_height
         self.channel_type = channel_type
@@ -47,7 +48,7 @@ class PupilFinder:
             win_size = self.win_size
 
         if not step_size:
-            step_size = self.step_size
+            step_size = self.main_step_size
 
         if not img_height:
             img_height = self.img_height
@@ -255,8 +256,9 @@ class PupilFinder:
                 union_channel = get_specific_channel(union_patch, self.channel_type,
                                                      blur_kernel=self.blur_kernel, blur_type=self.blur_type)
                 fp_height, fp_width = union_patch.shape[:2]
-                fp_points = self._gen_convol(step_size=32, img_width=fp_width, img_height=fp_height)
 
+                fp_points = self._gen_convol(step_size=self.secondary_step_size,
+                                             img_width=fp_width, img_height=fp_height)
                 fp_output = self.check_patch_async(union_channel, fp_points)
 
                 if len(fp_output) == 0:

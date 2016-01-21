@@ -34,7 +34,7 @@ video_show = False
 
 descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
 pupil_finder = PupilFinder(descriptor, svm_classifier_path=svm_classifier_path,
-                           win_size=win_size, step_size=step_size,
+                           win_size=win_size, main_step_size=step_size,
                            img_width=img_width, img_height=img_height,
                            channel_type=color_channel, blur_kernel=blur_kernel, blur_type=blur_type,
                            svm_kernel_type=kernel_type,
