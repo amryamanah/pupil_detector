@@ -10,3 +10,6 @@ data_analysis
 test_pupil
 *__pycache__
 *linear
+
+# remove hogmodel from git
+hog_model
