@@ -10,6 +10,11 @@ data_analysis
 test_pupil
 *__pycache__
 *linear
+<<<<<<< HEAD
 
 # remove hogmodel from git
 hog_model
+=======
+database/mongo
+database/mongod.pid
+>>>>>>> 1271bfcbcde3b88e2e24b505b8d4a8848915170e

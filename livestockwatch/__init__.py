@@ -1,6 +1,7 @@
 import json
 import logging
 import logging.config
+import pytz
 
 try:
     with open("logging.json", 'rt') as f:
@@ -9,4 +10,5 @@ try:
 except AssertionError as e:
     print(e)
 
+LOCAL_TIMEZONE = pytz.timezone('Asia/Tokyo')
 logger = logging.getLogger(__package__)

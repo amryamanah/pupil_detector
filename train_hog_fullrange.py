@@ -13,15 +13,16 @@ orientation = 9
 ppc = 4
 cpb = 1
 lst_color_channel = ["b_star", "gray", "b_star_hist_equal"]
-color_channel = "b_star_hist_equal"
+# color_channel = "b_star_hist_equal"
+# color_channel = "hue_custom"
 
-
-descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
-classifier = SimpleClassifier("dataset", "hog_model",
-                              color_channel, blur_kernel, blur_type, descriptor,
-                              kernel_type="linear", svm_implementation="default")
-classifier.load_dataset()
-classifier.training()
+for color_channel in lst_color_channel:
+    descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
+    classifier = SimpleClassifier("dataset", "hog_model",
+                                  color_channel, blur_kernel, blur_type, descriptor,
+                                  kernel_type="linear", svm_implementation="default")
+    classifier.load_dataset()
+    classifier.training()
 
 # for color_channel in lst_color_channel:
 #     descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
