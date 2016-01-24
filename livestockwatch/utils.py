@@ -7,9 +7,25 @@ import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import cv2
+from scipy.signal import savgol_filter
 from skimage import color, io
+
 from IPython import embed
+
+
+def svg_smoothing(data_series, window_length=27, polyorder=4, mode="nearest"):
+    lst_data_interp = data_series.interpolate(method="linear", limit_direction="both")
+    lst_data_savgol = savgol_filter(lst_data_interp, window_length=window_length, polyorder=polyorder, mode=mode)
+    return lst_data_savgol
+
+def remove_saturated_pixel(image, thresh_sat=30):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    (hue, sat, val) = cv2.split(hsv)
+    (_, sat_mask) = cv2.threshold(sat, thresh_sat, 255, cv2.THRESH_BINARY)
+    image = cv2.bitwise_and(image, image, mask=sat_mask)
+    return image
 
 
 def is_too_dark(image, val_lower=35.0):
@@ -301,6 +317,7 @@ def create_mask(frame):
 def get_specific_channel(image, channel_type, blur_kernel=None, blur_type="gaussian"):
 
         image = cv2.fastNlMeansDenoisingColored(image, None, 10, 10, 7, 21)
+
         if blur_kernel:
             if blur_type == "gaussian":
                 image = cv2.GaussianBlur(image, (blur_kernel, blur_kernel), 0)
