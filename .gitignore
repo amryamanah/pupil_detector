@@ -10,3 +10,5 @@ data_analysis
 test_pupil
 *__pycache__
 *linear
+database/mongo
+database/mongod.pid
