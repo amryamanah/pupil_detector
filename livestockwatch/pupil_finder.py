@@ -133,14 +133,24 @@ def main_detector(**kwargs):
     svg_minor_axis = svg_smoothing(cs_df.pupil_minor_axis)
     for i, idx in enumerate(cs_df.index):
         print("i = {} idx ={}".format(i, idx))
+        major_axis = svg_major_axis[i]
+        minor_axis = svg_minor_axis[i]
 
-        ea = EllipseAnalysis(svg_major_axis[i], svg_minor_axis[i])
-        cs_df.set_value(idx, "svg_pupil_major_axis", svg_major_axis[i])
-        cs_df.set_value(idx, "svg_pupil_minor_axis", svg_minor_axis[i])
-        cs_df.set_value(idx, "svg_ipr", ea.ipr)
-        cs_df.set_value(idx, "svg_area", ea.area)
-        cs_df.set_value(idx, "svg_eccentricity", ea.eccentricity)
-        cs_df.set_value(idx, "svg_perimeter", ea.perimeter)
+        if major_axis is None or minor_axis is None:
+            pass
+        elif major_axis < 0 or minor_axis < 0:
+            pass
+        elif major_axis - minor_axis < 0:
+            pass
+        else:
+            logging.info("Axis checker pass")
+            ea = EllipseAnalysis(svg_major_axis[i], svg_minor_axis[i])
+            cs_df.set_value(idx, "svg_pupil_major_axis", svg_major_axis[i])
+            cs_df.set_value(idx, "svg_pupil_minor_axis", svg_minor_axis[i])
+            cs_df.set_value(idx, "svg_ipr", ea.ipr)
+            cs_df.set_value(idx, "svg_area", ea.area)
+            cs_df.set_value(idx, "svg_eccentricity", ea.eccentricity)
+            cs_df.set_value(idx, "svg_perimeter", ea.perimeter)
 
     max_area = cs_df.area.max()
     svg_max_area = cs_df.svg_area.max()
@@ -404,6 +414,13 @@ class PupilFinder:
             major_axis, minor_axis, angle, ellipse_img, cnt = pupil_fit_ellipse(final_patch_equ)
             if major_axis is None or minor_axis is None:
                 return False, dct_result
+
+            if major_axis < 0 or minor_axis < 0:
+                return False, dct_result
+
+            if major_axis - minor_axis < 0:
+                return False, dct_result
+
             write_as_png(os.path.join(ellipse_fit_pathr, "{}.png".format(file_name)), ellipse_img)
             ea = EllipseAnalysis(major_axis, minor_axis)
             dct_result["ipr"] = ea.ipr
