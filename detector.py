@@ -18,54 +18,13 @@ ap.add_argument("--debug", required=False, type=bool, default=False, help="debug
 args = vars(ap.parse_args())
 print(args)
 
-
-# mongo_url = "mongodb://biseadmin:bise2014@162.243.1.142:27017/livestockwatch"
-# mongo_url = "mongodb://127.0.0.1:27017/livestockwatch"
-# orientation = 9
-# ppc = 4
-# cpb = 1
-# kernel_type = "linear"
-# blur_kernel = 15
-# blur_type = "bilateral"
-# color_channel = "b_star_hist_equal"
-# svm_classifier_path = os.path.join("hog_model",
-#                                    "{}".format(kernel_type),
-#                                    "o{}_ppc{}_cpb{}".format(orientation, ppc, cpb),
-#                                    "{}".format(color_channel),
-#                                    "hog_svm.pkl")
-# debug = args["debug"]
-# win_size = 256
-# img_width = 1280
-# img_height = 960
-# analysis_type = "partial"
-# max_timestamp = 2.0
-# step_second = 1.0
-#
-#
-#
-# skip_folder = ["pending", "finished",
-#                "nopl", "pl",
-#                "bbox_img", "candidate", "final", "plr_result", "final_extended",
-#                "hard_neg", "raw", "hist_equ", "hist_equ_blur", "positive", "raw", "union"]
-
-# descriptor = HogDescriptor(orientation=orientation, pixels_per_cell=ppc, cells_per_block=cpb)
-# pupil_finder = PupilFinder(
-#                            descriptor=descriptor, svm_classifier_path=svm_classifier_path, win_size=win_size,
-#                            main_step_size=args["main_step"], secondary_step_size=args["secondary_step"],
-#                            img_width=img_width, img_height=img_height,
-#                            channel_type=color_channel, blur_kernel=blur_kernel, blur_type=blur_type,
-#                            svm_kernel_type=kernel_type,
-#                            debug=debug)
-
 scanned_folder = os.path.abspath(args["input"])
 lst_job = []
 for dirpath, dirnames, files in os.walk(scanned_folder):
     part_dirpath = dirpath.split(os.sep)
     if is_skipped_folder(dirpath, SKIP_FOLDER):
-        # print("[SKIPPED] dirpath {}".format(dirpath))
         pass
     else:
-        # print("[PROCESSED] dirpath {}".format(dirpath))
         for filename in files:
             if filename.endswith(".avi"):
                 job_kwargs = {
@@ -80,7 +39,6 @@ for dirpath, dirnames, files in os.walk(scanned_folder):
 
 start_time = time()
 pprint("[START] Processing {} capture session".format(len(lst_job)))
-# Parallel(n_jobs=4)(delayed(main_detector)(**job) for job in lst_job)
 for job in lst_job:
     main_detector(**job)
 

@@ -1,18 +1,14 @@
-from IPython import embed
-
-from .utils import equ_hist_color_image
-import cv2
+import math
 import matplotlib
-
 matplotlib.use('Agg')
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from skimage import color, io
 from skimage.segmentation import clear_border
 from skimage.measure import regionprops, label
-
-import math
-
+from .utils import equ_hist_color_image
+from IPython import embed
 
 
 
@@ -71,20 +67,6 @@ def pupil_fit_ellipse(image, blur_kernel=5, close_kernel=7, open_kernel=22, debu
         if area > 3000:
             image_untouched = equ_hist_color_image(image_untouched)
             cv2.drawContours(image_untouched, cnt, -1, (0, 0, 255), 3)
-
-            # if mode == "opencv":
-            #     ellipse = cv2.fitEllipse(cnt)
-            #     centroid, (minor_axis, major_axis), angle = ellipse
-            #
-            # elif mode == "skimage":
-            #     props, pupil_area = calculate_axis_skimage(opening.copy())
-            #     minor_axis = props.minor_axis_length
-            #     major_axis = props.major_axis_length
-            #     centroid = (props.centroid[1], props.centroid[0])
-            #     angle = props.orientation
-            # else:
-            #     raise UnsupportedAnalysisMode
-            #
 
             ellipse = cv2.fitEllipse(cnt)
             centroid, (minor_axis, major_axis), angle = ellipse
