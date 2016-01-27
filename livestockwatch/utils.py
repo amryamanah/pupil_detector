@@ -7,7 +7,6 @@ import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import cv2
 from scipy.signal import savgol_filter
 from skimage import color, io

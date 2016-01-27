@@ -35,7 +35,10 @@ def main_detector(**kwargs):
 
     part_dirpath = dirpath.split(os.sep)
     finished_dir = os.path.join(os.sep.join(part_dirpath[:-1]), "finished")
-    os.makedirs(finished_dir, exist_ok=True)
+    failed_dir = os.path.join(os.sep.join(part_dirpath[:-1]), "failed")
+    for dirname in [finished_dir, failed_dir]:
+        os.makedirs(dirname, exist_ok=True)
+
     descriptor = HogDescriptor(
             orientation=config.ORIENTATION,
             pixels_per_cell=config.PPC,
@@ -70,6 +73,7 @@ def main_detector(**kwargs):
     frame_count = 1
     cs_name = part_dirpath[-2]
     lst_dct_result = []
+    pos_cs_flag = True
     while True:
         (grabbed, frame) = video.read()
 
@@ -82,6 +86,10 @@ def main_detector(**kwargs):
 
         frame_timestamp = float("{:.2f}".format(frame_timestamp))
         filename = "{}_{}".format(frame_count, frame_timestamp)
+
+        if not first_eye_timestamp and frame_timestamp > 1.0:
+            pos_cs_flag = False
+            break
 
         if not first_eye_timestamp and frame_timestamp > 0.5:
             final_eye_flag, dct_result = pupil_finder.analyze_pupil(frame, nopl_result_path, filename)
@@ -103,98 +111,100 @@ def main_detector(**kwargs):
         frame_count += 1
 
     video.release()
+    if not pos_cs_flag:
+        shutil.move(dirpath, failed_dir)
+    else:
+        for dct_result in lst_dct_result:
+            retry = True
+            while retry:
+                try:
+                    capture_session.update_one(
+                            {"_id": dct_result["_id"]},
+                            {"$set": dct_result},
+                            upsert=True
+                    )
+                    retry = False
+                except NameError as e:
+                    print("[BREAK], {} {}".format(type(e), e))
+                    retry = False
+                except ConnectionResetError as e:
+                    print("[RETRY], {} {}".format(type(e), e))
+                    connection.close()
+                    connection = pymongo.MongoClient(config.MONGO_URL)
+                    db = connection.livestockwatch
+                    capture_session = db.capture_session
+                    retry = True
 
-    for dct_result in lst_dct_result:
-        retry = True
-        while retry:
-            try:
-                capture_session.update_one(
-                        {"_id": dct_result["_id"]},
-                        {"$set": dct_result},
-                        upsert=True
-                )
-                retry = False
-            except NameError as e:
-                print("[BREAK], {} {}".format(type(e), e))
-                retry = False
-            except ConnectionResetError as e:
-                print("[RETRY], {} {}".format(type(e), e))
-                connection.close()
-                connection = pymongo.MongoClient(config.MONGO_URL)
-                db = connection.livestockwatch
-                capture_session = db.capture_session
-                retry = True
+        cs_df = odo(lst_dct_result, pd.DataFrame)
+        cs_df = cs_df[cs_df.cs_name == cs_name]
+        cs_df.sort_values("framecount", ascending=True, inplace=True)
 
-    cs_df = odo(lst_dct_result, pd.DataFrame)
-    cs_df = cs_df[cs_df.cs_name == cs_name]
-    cs_df.sort_values("framecount", ascending=True, inplace=True)
+        svg_major_axis = svg_smoothing(cs_df.pupil_major_axis)
+        svg_minor_axis = svg_smoothing(cs_df.pupil_minor_axis)
+        for i, idx in enumerate(cs_df.index):
+            print("i = {} idx ={}".format(i, idx))
+            major_axis = svg_major_axis[i]
+            minor_axis = svg_minor_axis[i]
 
-    svg_major_axis = svg_smoothing(cs_df.pupil_major_axis)
-    svg_minor_axis = svg_smoothing(cs_df.pupil_minor_axis)
-    for i, idx in enumerate(cs_df.index):
-        print("i = {} idx ={}".format(i, idx))
-        major_axis = svg_major_axis[i]
-        minor_axis = svg_minor_axis[i]
-
-        if major_axis is None or minor_axis is None:
-            pass
-        elif major_axis < 0 or minor_axis < 0:
-            pass
-        elif major_axis - minor_axis < 0:
-            pass
-        else:
-            logging.info("Axis checker pass")
-            ea = EllipseAnalysis(svg_major_axis[i], svg_minor_axis[i])
-            cs_df.set_value(idx, "svg_pupil_major_axis", svg_major_axis[i])
-            cs_df.set_value(idx, "svg_pupil_minor_axis", svg_minor_axis[i])
-            cs_df.set_value(idx, "svg_ipr", ea.ipr)
-            cs_df.set_value(idx, "svg_area", ea.area)
-            cs_df.set_value(idx, "svg_eccentricity", ea.eccentricity)
-            cs_df.set_value(idx, "svg_perimeter", ea.perimeter)
-
-    max_area = cs_df.area.max()
-    svg_max_area = cs_df.svg_area.max()
-
-    for idx in cs_df.index:
-        cs_df.set_value(idx, "max_area", max_area)
-        cs_df.set_value(idx, "svg_max_area", max_area)
-
-        ca = ellipse_calculate_ca(cs_df.loc[idx]["area"], max_area)
-        svg_ca = ellipse_calculate_ca(cs_df.loc[idx]["svg_area"], svg_max_area)
-
-        cs_df.set_value(idx, "ca", ca)
-        cs_df.set_value(idx, "svg_ca", svg_ca)
-        while True:
-            try:
-                capture_session.find_one_and_update(
-                        {'_id': cs_df.loc[idx]["_id"]},
-                        {"$set": {
-                            "ca": cs_df.loc[idx]["ca"],
-                            "svg_ca": cs_df.loc[idx]["svg_ca"],
-                            "max_area": cs_df.loc[idx]["max_area"],
-                            "svg_max_area": cs_df.loc[idx]["svg_max_area"],
-
-                            "svg_area": cs_df.loc[idx]["svg_area"],
-                            "svg_pupil_major_axis": cs_df.loc[idx]["svg_pupil_major_axis"],
-                            "svg_pupil_minor_axis": cs_df.loc[idx]["svg_pupil_minor_axis"],
-                            "svg_ipr": cs_df.loc[idx]["svg_ipr"],
-                            "svg_eccentricity": cs_df.loc[idx]["svg_eccentricity"],
-                            "svg_perimeter": cs_df.loc[idx]["svg_perimeter"],
-                        }}
-                )
-                break
-            except ConnectionResetError as e:
-                connection.close()
-                connection = pymongo.MongoClient(config.MONGO_URL)
-                db = connection.livestockwatch
-                capture_session = db.capture_session
-                print("[RETRY], {} {}".format(type(e), e))
+            if major_axis is None or minor_axis is None:
                 pass
+            elif major_axis < 0 or minor_axis < 0:
+                pass
+            elif major_axis - minor_axis < 0:
+                pass
+            else:
+                logging.info("Axis checker pass")
+                ea = EllipseAnalysis(svg_major_axis[i], svg_minor_axis[i])
+                cs_df.set_value(idx, "svg_pupil_major_axis", svg_major_axis[i])
+                cs_df.set_value(idx, "svg_pupil_minor_axis", svg_minor_axis[i])
+                cs_df.set_value(idx, "svg_ipr", ea.ipr)
+                cs_df.set_value(idx, "svg_area", ea.area)
+                cs_df.set_value(idx, "svg_eccentricity", ea.eccentricity)
+                cs_df.set_value(idx, "svg_perimeter", ea.perimeter)
 
-    csv_path = os.path.join(dirpath, "{}.csv".format(cs_name))
-    cs_df.to_csv(csv_path, encoding='utf-8')
+        max_area = cs_df.area.max()
+        svg_max_area = cs_df.svg_area.max()
+
+        for idx in cs_df.index:
+            cs_df.set_value(idx, "max_area", max_area)
+            cs_df.set_value(idx, "svg_max_area", max_area)
+
+            ca = ellipse_calculate_ca(cs_df.loc[idx]["area"], max_area)
+            svg_ca = ellipse_calculate_ca(cs_df.loc[idx]["svg_area"], svg_max_area)
+
+            cs_df.set_value(idx, "ca", ca)
+            cs_df.set_value(idx, "svg_ca", svg_ca)
+            while True:
+                try:
+                    capture_session.find_one_and_update(
+                            {'_id': cs_df.loc[idx]["_id"]},
+                            {"$set": {
+                                "ca": cs_df.loc[idx]["ca"],
+                                "svg_ca": cs_df.loc[idx]["svg_ca"],
+                                "max_area": cs_df.loc[idx]["max_area"],
+                                "svg_max_area": cs_df.loc[idx]["svg_max_area"],
+
+                                "svg_area": cs_df.loc[idx]["svg_area"],
+                                "svg_pupil_major_axis": cs_df.loc[idx]["svg_pupil_major_axis"],
+                                "svg_pupil_minor_axis": cs_df.loc[idx]["svg_pupil_minor_axis"],
+                                "svg_ipr": cs_df.loc[idx]["svg_ipr"],
+                                "svg_eccentricity": cs_df.loc[idx]["svg_eccentricity"],
+                                "svg_perimeter": cs_df.loc[idx]["svg_perimeter"],
+                            }}
+                    )
+                    break
+                except ConnectionResetError as e:
+                    connection.close()
+                    connection = pymongo.MongoClient(config.MONGO_URL)
+                    db = connection.livestockwatch
+                    capture_session = db.capture_session
+                    print("[RETRY], {} {}".format(type(e), e))
+                    pass
+
+        csv_path = os.path.join(dirpath, "{}.csv".format(cs_name))
+        cs_df.to_csv(csv_path, encoding='utf-8')
+        shutil.move(dirpath, finished_dir)
     connection.close()
-    shutil.move(dirpath, finished_dir, )
     logger.info("Finish processing {} done in {:.3f} minute".format(video_path, (time() - start_time) / 60))
 
 
