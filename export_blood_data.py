@@ -141,13 +141,14 @@ def interpolate_blood_data():
         ("vit_a", pymongo.DESCENDING)
     ])
 
-    date_x = np.arange(datetime(2015,1,1),datetime(2015,12,1),timedelta(days=1)).astype(datetime)
+    date_x = np.arange(datetime(2015, 1, 1),datetime(2015,12,27), timedelta(days=1)).astype(datetime)
 
     bd_resource = resource("{}::blood_data".format(config.MONGO_URL))
     ds_blood_data = "758 * {cattle_id: string, datetaken: datetime, vit_a: float64, beta_caroten: float64, vit_e: float64}"
     blood_df = odo("{}::blood_data".format(config.MONGO_URL), pd.DataFrame, dshape=ds_blood_data)
     lst_cattle_id = blood_df.cattle_id.unique()
     for cattle_id in lst_cattle_id:
+    # for cattle_id in ["615"]:
         vita_series = pd.Series(blood_df[blood_df.cattle_id == cattle_id].set_index("datetaken").to_dict()["vit_a"],
                                  index=date_x)
         vita_interp = vita_series.interpolate(method="linear")

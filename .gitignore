@@ -3,6 +3,7 @@ orat_oret
 HOG
 LBP
 *.log
+log
 *DS_Store
 dataset
 data_analysis
